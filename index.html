@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>おひめさまミラー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FDF0F5; --paper:#FFFBF7; --ink:#6B4A55; --rose:#E77BA0;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif;
+    background:var(--bg);
+    background-image:radial-gradient(circle at 20% 10%, #FCE3EE 0 18%, transparent 19%),
+                     radial-gradient(circle at 85% 90%, #F3E6F7 0 15%, transparent 16%);
+    color:var(--ink); min-height:100dvh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:12px 12px calc(16px + env(safe-area-inset-bottom));
+  }
+  header{text-align:center; padding:6px 0 10px;}
+  h1{font-weight:900; font-size:clamp(20px,6vw,28px); letter-spacing:.08em;}
+  .sub{font-size:12px; font-weight:700; color:#B58394; letter-spacing:.15em;}
+
+  .mirror{
+    position:relative; width:min(94vw,480px);
+    border-radius:28px; background:var(--paper);
+    padding:10px;
+    box-shadow:0 8px 24px rgba(200,120,150,.18);
+    border:3px solid #F6CFDD;
+  }
+  .mirror::before{
+    content:""; position:absolute; inset:4px; border-radius:24px;
+    border:2px dashed #EFB9CD; pointer-events:none; z-index:3;
+  }
+  .stage{
+    position:relative; border-radius:20px; overflow:hidden;
+    aspect-ratio:3/4; background:#F9E2EA;
+  }
+  video{display:none;}
+  canvas#view{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; transform:scaleX(-1);
+  }
+  .status{
+    position:absolute; inset:0; z-index:5;
+    display:flex; flex-direction:column; gap:10px;
+    align-items:center; justify-content:center; text-align:center;
+    font-weight:700; font-size:15px; padding:20px;
+    background:rgba(253,240,245,.92);
+  }
+  .status .big{font-size:40px;}
+  .status.hidden{display:none;}
+  .count{
+    position:absolute; inset:0; z-index:6;
+    display:flex; align-items:center; justify-content:center;
+    font-size:110px; font-weight:900; color:#fff;
+    text-shadow:0 4px 18px rgba(220,110,150,.65);
+    pointer-events:none; opacity:0; transition:opacity .15s;
+  }
+  .count.show{opacity:1;}
+
+  .themes{
+    display:flex; gap:10px; margin:14px 0 4px;
+    overflow-x:auto; padding:4px 6px 6px;
+    scrollbar-width:none;
+  }
+  .themes::-webkit-scrollbar{display:none;}
+  .theme-btn{
+    flex:0 0 auto; width:58px; border:none; background:none; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    font-family:inherit; font-weight:700; font-size:11px; color:var(--ink);
+  }
+  .swatch{
+    width:42px; height:42px; border-radius:50%;
+    border:3px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.12);
+    transition:transform .15s;
+  }
+  .theme-btn.active .swatch{transform:scale(1.16); box-shadow:0 0 0 3px var(--rose), 0 3px 10px rgba(0,0,0,.15);}
+  .sw-rose{background:linear-gradient(135deg,#F7A8C4,#E85D8A);}
+  .sw-sora{background:linear-gradient(135deg,#DDE6FA,#8FA5E0);}
+  .sw-hima{background:linear-gradient(135deg,#F7D372,#E8A93C);}
+  .sw-niji{background:conic-gradient(#F26D6D,#F5A623,#F7DC4F,#7DC97F,#6FA8DC,#B58AD6,#F26D6D);}
+  .sw-hoshi{background:linear-gradient(135deg,#8A96C9,#3D4A80 60%),radial-gradient(circle at 65% 35%, #F2C94C 0 22%, transparent 23%);background-blend-mode:screen;}
+  .sw-umi{background:linear-gradient(135deg,#C5EDE9,#5FA8B8);}
+
+  .shutter-row{display:flex; justify-content:center; margin-top:8px;}
+  #shutter{
+    width:82px; height:82px; border-radius:50%;
+    border:5px solid #fff; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, #F49CBD, var(--rose));
+    box-shadow:0 6px 16px rgba(231,123,160,.45);
+    font-size:34px; line-height:1;
+    transition:transform .1s;
+  }
+  #shutter:active{transform:scale(.92);}
+  .hint{font-size:11px; font-weight:700; color:#BA8A9B; margin-top:8px; text-align:center;}
+
+  .modal{
+    position:fixed; inset:0; z-index:50;
+    background:rgba(90,50,70,.55);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal.show{display:flex;}
+  .modal-card{
+    background:var(--paper); border-radius:24px; padding:16px;
+    width:min(92vw,420px); text-align:center;
+    border:3px solid #F6CFDD;
+  }
+  .modal-card img{width:100%; border-radius:16px; display:block;}
+  .modal-card p{font-size:12px; font-weight:700; margin:10px 0; color:#B58394;}
+  .modal-actions{display:flex; gap:10px; justify-content:center;}
+  .btn{
+    font-family:inherit; font-weight:900; font-size:14px;
+    border:none; border-radius:999px; padding:12px 22px; cursor:pointer;
+    text-decoration:none; display:inline-block;
+  }
+  .btn-save{background:var(--rose); color:#fff;}
+  .btn-close{background:#F1DDE6; color:var(--ink);}
+</style>
+</head>
+<body>
+<header>
+  <h1>👑 おひめさまミラー</h1>
+  <div class="sub">すきな おひめさまを えらんで へんしん！</div>
+</header>
+
+<div class="mirror">
+  <div class="stage">
+    <video id="cam" playsinline autoplay muted></video>
+    <canvas id="view"></canvas>
+    <div class="status" id="status">
+      <div class="big">👑✨</div>
+      <div id="statusText">じゅんびちゅう…</div>
+    </div>
+    <div class="count" id="count"></div>
+  </div>
+
+  <div class="themes" id="themes">
+    <button class="theme-btn active" data-theme="rose"><span class="swatch sw-rose"></span>ローズひめ</button>
+    <button class="theme-btn" data-theme="sora"><span class="swatch sw-sora"></span>そらのひめ</button>
+    <button class="theme-btn" data-theme="hima"><span class="swatch sw-hima"></span>はなのひめ</button>
+    <button class="theme-btn" data-theme="niji"><span class="swatch sw-niji"></span>にじのひめ</button>
+    <button class="theme-btn" data-theme="hoshi"><span class="swatch sw-hoshi"></span>ほしのひめ</button>
+    <button class="theme-btn" data-theme="umi"><span class="swatch sw-umi"></span>うみのひめ</button>
+  </div>
+
+  <div class="shutter-row">
+    <button id="shutter" aria-label="しゃしんをとる">📸</button>
+  </div>
+  <div class="hint">ボタンをおすと 3・2・1で パシャ！</div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <img id="shot" alt="へんしんしたしゃしん">
+    <p>ながおしでも ほぞんできます</p>
+    <div class="modal-actions">
+      <a class="btn btn-save" id="saveLink" download="ohimesama.png">ほぞんする</a>
+      <button class="btn btn-close" id="closeModal">とじる</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const video = document.getElementById("cam");
+const canvas = document.getElementById("view");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const statusText = document.getElementById("statusText");
+const countEl = document.getElementById("count");
+
+const RAINBOW = ["#F26D6D","#F5A623","#F7DC4F","#7DC97F","#6FA8DC","#B58AD6"];
+
+// head: tiara / flower / star / rainbow / shell
+// gem : heart / drop / flower / star / shell  (イヤリング＆ペンダント)
+// spark: classic / petal / rainbow / star / bubble
+const THEMES = {
+  rose: { band:"#E8B84B", bandHi:"#F6D98A", jewel:"#E85D8A", jewel2:"#F7A8C4",
+          pearl:"#FFF6F0", blush:"rgba(244,150,175,.28)",
+          head:"tiara", gem:"heart", spark:"classic" },
+  sora: { band:"#AEBBE3", bandHi:"#E9EEFB", jewel:"#6E8AE0", jewel2:"#AFC4F5",
+          pearl:"#F6F9FF", blush:"rgba(160,180,235,.22)",
+          head:"tiara", gem:"drop", spark:"classic" },
+  hima: { band:"#C98A3A", bandHi:"#E8B95C", jewel:"#E8742D", jewel2:"#F7C08A",
+          pearl:"#FFFBEE", blush:"rgba(240,175,110,.28)",
+          head:"flower", gem:"flower", spark:"petal",
+          petal:"#F7C948", flowerCenter:"#9C6B2F", petal2:"#F49CBD", leaf:"#8FB56A" },
+  niji: { band:"#E8B84B", bandHi:"#F6D98A", jewel:"#B58AD6", jewel2:"#D9BCEF",
+          pearl:"#FFFDF5", blush:"rgba(244,150,175,.24)",
+          head:"rainbow", gem:"drop", spark:"rainbow" },
+  hoshi:{ band:"#E8C86A", bandHi:"#F7E3A0", jewel:"#F2C94C", jewel2:"#F7DC8A",
+          pearl:"#FFFBEA", blush:"rgba(240,190,150,.25)",
+          head:"star", gem:"star", spark:"star" },
+  umi:  { band:"#7FBFC4", bandHi:"#C5EDE9", jewel:"#4E9AAE", jewel2:"#9AD4DC",
+          pearl:"#F4FBFB", blush:"rgba(150,205,215,.26)",
+          head:"shell", gem:"shell", spark:"bubble" },
+};
+let theme = THEMES.rose;
+
+document.querySelectorAll(".theme-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".theme-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    theme = THEMES[btn.dataset.theme];
+  });
+});
+
+let landmarker = null;
+let sparkleSeed = [];
+
+function setStatus(msg, emoji){
+  statusEl.classList.remove("hidden");
+  statusText.textContent = msg;
+  if(emoji) statusEl.querySelector(".big").textContent = emoji;
+}
+
+async function init(){
+  try{
+    setStatus("カメラのじゅんびちゅう…","📷");
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:"user", width:{ideal:960}, height:{ideal:1280} },
+      audio:false
+    });
+    video.srcObject = stream;
+    await new Promise(r=>{ video.onloadedmetadata = r; });
+    await video.play();
+
+    setStatus("まほうのじゅんびちゅう…","✨");
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    landmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions:{
+        modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate:"GPU"
+      },
+      runningMode:"VIDEO",
+      numFaces:2
+    });
+
+    statusEl.classList.add("hidden");
+    requestAnimationFrame(loop);
+  }catch(err){
+    console.error(err);
+    if(err && err.name==="NotAllowedError"){
+      setStatus("カメラのしようを きょかしてね（ブラウザの せっていから）","🙏");
+    }else if(location.protocol==="file:"){
+      setStatus("このページは https のサイトに おいてから ひらいてね","🔒");
+    }else{
+      setStatus("うまくうごきませんでした。ページを さいよみこみしてね","😢");
+    }
+  }
+}
+
+function loop(){
+  if(video.readyState >= 2){
+    if(canvas.width !== video.videoWidth){
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const res = landmarker.detectForVideo(video, performance.now());
+    if(res.faceLandmarks){
+      res.faceLandmarks.forEach((lm,i)=>decorate(lm,i));
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function px(p){ return { x:p.x*canvas.width, y:p.y*canvas.height }; }
+
+function decorate(lm, faceIdx){
+  const pL = px(lm[234]), pR = px(lm[454]);
+  const pTop = px(lm[10]);
+  const pChin = px(lm[152]);
+  const faceW = Math.hypot(pR.x-pL.x, pR.y-pL.y);
+  if(faceW < 24) return;
+  const ang = Math.atan2(pR.y-pL.y, pR.x-pL.x);
+  const vx = -Math.sin(ang), vy = Math.cos(ang);
+  const ux = Math.cos(ang), uy = Math.sin(ang);
+
+  // ほっぺ
+  const cheekOff = faceW*0.26, cheekDown = faceW*0.30;
+  softCircle(pTop.x - ux*cheekOff + vx*cheekDown, pTop.y - uy*cheekOff + vy*cheekDown, faceW*0.085, theme.blush);
+  softCircle(pTop.x + ux*cheekOff + vx*cheekDown, pTop.y + uy*cheekOff + vy*cheekDown, faceW*0.085, theme.blush);
+
+  // あたまのかざり
+  const hx = pTop.x - vx*faceW*0.20, hy = pTop.y - vy*faceW*0.20;
+  if(theme.head==="tiara")   drawTiara(hx, hy, faceW*0.64, ang);
+  if(theme.head==="flower")  drawFlowerCrown(hx, hy, faceW*0.72, ang);
+  if(theme.head==="star")    drawStarCrown(hx, hy, faceW*0.64, ang);
+  if(theme.head==="rainbow") drawRainbowArch(pTop.x - vx*faceW*0.30, pTop.y - vy*faceW*0.30, faceW*0.95, ang);
+  if(theme.head==="shell")   drawShellCrown(hx, hy, faceW*0.66, ang);
+
+  // イヤリング
+  drawEarring(pL.x + vx*faceW*0.14, pL.y + vy*faceW*0.14, faceW, ang);
+  drawEarring(pR.x + vx*faceW*0.14, pR.y + vy*faceW*0.14, faceW, ang);
+
+  // ネックレス
+  drawNecklace(pChin, faceW, ux, uy, vx, vy);
+
+  // キラキラ
+  drawSparkles(faceIdx, (pL.x+pR.x)/2, (pL.y+pR.y)/2, faceW);
+}
+
+// ---------- パーツ描画ヘルパー ----------
+function softCircle(x,y,r,color){
+  ctx.save();
+  const g = ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0,color); g.addColorStop(1,"rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawHeart(x,y,s,fill,stroke){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.beginPath();
+  ctx.moveTo(0, s*0.35);
+  ctx.bezierCurveTo(-s*1.1, -s*0.45, -s*0.55, -s*1.15, 0, -s*0.45);
+  ctx.bezierCurveTo( s*0.55, -s*1.15,  s*1.1, -s*0.45, 0, s*0.35);
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  if(stroke){ ctx.lineWidth = Math.max(1,s*0.14); ctx.strokeStyle = stroke; ctx.stroke(); }
+  ctx.beginPath();
+  ctx.arc(-s*0.3, -s*0.45, s*0.16, 0, Math.PI*2);
+  ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fill();
+  ctx.restore();
+}
+
+function drawStar(x,y,r,fill,stroke){
+  ctx.save();
+  ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const a = -Math.PI/2 + i*Math.PI/5;
+    const rr = (i%2===0) ? r : r*0.45;
+    const sx = x + rr*Math.cos(a), sy = y + rr*Math.sin(a);
+    if(i===0) ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  if(stroke){ ctx.lineWidth = Math.max(1, r*0.12); ctx.strokeStyle = stroke; ctx.stroke(); }
+  ctx.restore();
+}
+
+function drawDrop(x,y,s,fill,stroke){
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y-s);
+  ctx.quadraticCurveTo(x+s*0.9, y+s*0.15, x, y+s*0.8);
+  ctx.quadraticCurveTo(x-s*0.9, y+s*0.15, x, y-s);
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  if(stroke){ ctx.lineWidth = Math.max(1, s*0.14); ctx.strokeStyle = stroke; ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(x-s*0.22, y, s*0.14, 0, Math.PI*2);
+  ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fill();
+  ctx.restore();
+}
+
+function drawFlowerShape(x,y,r,petal,center){
+  ctx.save();
+  for(let i=0;i<5;i++){
+    const a = i*Math.PI*2/5 - Math.PI/2;
+    ctx.beginPath();
+    ctx.arc(x+Math.cos(a)*r*0.58, y+Math.sin(a)*r*0.58, r*0.42, 0, Math.PI*2);
+    ctx.fillStyle = petal; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.stroke();
+  }
+  ctx.beginPath(); ctx.arc(x, y, r*0.32, 0, Math.PI*2);
+  ctx.fillStyle = center; ctx.fill();
+  ctx.restore();
+}
+
+function drawShellFan(x,y,r,fill,line){
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.arc(x, y, r, Math.PI*1.12, Math.PI*1.88);
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = Math.max(1, r*0.08);
+  ctx.strokeStyle = line; ctx.stroke();
+  // すじ
+  ctx.lineWidth = Math.max(1, r*0.05);
+  for(let i=1;i<=3;i++){
+    const a = Math.PI*1.12 + (Math.PI*0.76)*i/4;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a)*r*0.92, y + Math.sin(a)*r*0.92);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawGem(type, x, y, s){
+  if(type==="heart")  drawHeart(x, y, s, theme.jewel, "#fff");
+  if(type==="drop")   drawDrop(x, y, s*1.1, theme.jewel, "#fff");
+  if(type==="star")   drawStar(x, y, s*1.15, theme.jewel, "#fff");
+  if(type==="flower") drawFlowerShape(x, y, s*1.1, theme.petal || theme.jewel2, theme.flowerCenter || theme.jewel);
+  if(type==="shell"){
+    drawShellFan(x, y+s*0.3, s*1.15, theme.jewel2, theme.band);
+    ctx.beginPath(); ctx.arc(x, y+s*0.55, s*0.28, 0, Math.PI*2);
+    ctx.fillStyle = theme.pearl; ctx.fill();
+  }
+}
+
+// ---------- あたまのかざり ----------
+function bandGradient(w){
+  const g = ctx.createLinearGradient(-w/2,0,w/2,0);
+  g.addColorStop(0, theme.band);
+  g.addColorStop(.5, theme.bandHi);
+  g.addColorStop(1, theme.band);
+  return g;
+}
+
+function drawTiara(cx, cy, w, ang){
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(ang);
+  const h = w*0.42;
+  ctx.beginPath();
+  ctx.moveTo(-w/2, 0);
+  ctx.quadraticCurveTo(0, h*0.22, w/2, 0);
+  ctx.quadraticCurveTo(0, h*0.40, -w/2, 0);
+  ctx.closePath();
+  const bg = bandGradient(w);
+  ctx.fillStyle = bg; ctx.fill();
+  ctx.lineWidth = Math.max(1.5, w*0.015);
+  ctx.strokeStyle = theme.band; ctx.stroke();
+
+  const peaks = [
+    {x:-w*0.30, ph:h*0.55, r:w*0.045},
+    {x:0,       ph:h*0.95, r:w*0.06},
+    {x: w*0.30, ph:h*0.55, r:w*0.045},
+  ];
+  peaks.forEach(p=>{
+    ctx.beginPath();
+    ctx.moveTo(p.x - w*0.11, h*0.10);
+    ctx.quadraticCurveTo(p.x - w*0.02, -p.ph*0.55, p.x, -p.ph);
+    ctx.quadraticCurveTo(p.x + w*0.02, -p.ph*0.55, p.x + w*0.11, h*0.10);
+    ctx.closePath();
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.strokeStyle = theme.band; ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x, -p.ph, p.r, 0, Math.PI*2);
+    ctx.fillStyle = theme.pearl; ctx.fill();
+    ctx.strokeStyle = theme.band; ctx.stroke();
+  });
+
+  drawGem(theme.gem==="drop" ? "drop" : "heart", 0, -h*0.28, w*0.085);
+  [-w*0.30, w*0.30].forEach(x=>{
+    ctx.beginPath(); ctx.arc(x, -h*0.10, w*0.045, 0, Math.PI*2);
+    ctx.fillStyle = theme.jewel2; ctx.fill();
+    ctx.lineWidth = Math.max(1, w*0.012);
+    ctx.strokeStyle = "#fff"; ctx.stroke();
+  });
+  for(let i=-3;i<=3;i++){
+    if(i===0) continue;
+    const x = i*(w*0.115);
+    const y = h*0.24*(1 - (x/(w/2))*(x/(w/2))) + h*0.02;
+    ctx.beginPath(); ctx.arc(x, y, w*0.02, 0, Math.PI*2);
+    ctx.fillStyle = theme.pearl; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFlowerCrown(cx, cy, w, ang){
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(ang);
+  const arcY = t => -w*0.06 + w*0.14*t*t; // t = x/(w/2)
+  // はっぱ
+  ctx.fillStyle = theme.leaf;
+  for(let i=-5;i<=5;i++){
+    const t = i/5, x = t*w/2, y = arcY(t);
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(t*0.7 + (i%2 ? 0.5 : -0.5));
+    ctx.beginPath(); ctx.ellipse(0, 0, w*0.045, w*0.018, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  // おはな（ちいさい→おおきい→ちいさい）
+  const spots = [
+    {t:-0.82, r:w*0.050, p:theme.petal2},
+    {t:-0.42, r:w*0.062, p:theme.petal},
+    {t: 0.00, r:w*0.082, p:theme.petal},
+    {t: 0.42, r:w*0.062, p:theme.petal2},
+    {t: 0.82, r:w*0.050, p:theme.petal},
+  ];
+  spots.forEach(s=>{
+    drawFlowerShape(s.t*w/2, arcY(s.t), s.r, s.p, theme.flowerCenter);
+  });
+  ctx.restore();
+}
+
+function drawStarCrown(cx, cy, w, ang){
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(ang);
+  const h = w*0.42;
+  ctx.beginPath();
+  ctx.moveTo(-w/2, 0);
+  ctx.quadraticCurveTo(0, h*0.22, w/2, 0);
+  ctx.quadraticCurveTo(0, h*0.40, -w/2, 0);
+  ctx.closePath();
+  ctx.fillStyle = bandGradient(w); ctx.fill();
+  ctx.lineWidth = Math.max(1.5, w*0.015);
+  ctx.strokeStyle = theme.band; ctx.stroke();
+
+  const stems = [
+    {x:-w*0.28, ph:h*0.55, r:w*0.055},
+    {x:0,       ph:h*0.95, r:w*0.08},
+    {x: w*0.28, ph:h*0.55, r:w*0.055},
+  ];
+  ctx.lineWidth = Math.max(1.5, w*0.018);
+  ctx.strokeStyle = theme.band;
+  stems.forEach(s=>{
+    ctx.beginPath(); ctx.moveTo(s.x, h*0.05); ctx.lineTo(s.x, -s.ph*0.8); ctx.stroke();
+    drawStar(s.x, -s.ph, s.r, theme.jewel, "#C99A2E");
+  });
+  // あいだのこぼし
+  [-w*0.14, w*0.14].forEach(x=>{
+    drawStar(x, -h*0.30, w*0.028, theme.pearl, theme.band);
+  });
+  ctx.restore();
+}
+
+function drawRainbowArch(cx, cy, w, ang){
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(ang);
+  const baseY = 0;
+  const lw = w*0.038;
+  ctx.lineWidth = lw;
+  ctx.lineCap = "round";
+  RAINBOW.forEach((c,i)=>{
+    ctx.beginPath();
+    ctx.strokeStyle = c;
+    ctx.arc(0, baseY, w*0.50 - i*lw, Math.PI, Math.PI*2);
+    ctx.stroke();
+  });
+  // りょうはしの くも
+  [-1,1].forEach(sgn=>{
+    const bx = sgn*w*0.44, by = baseY + w*0.01;
+    ctx.fillStyle = "rgba(255,255,255,.95)";
+    [[0,0,w*0.055],[sgn*w*0.05,-w*0.02,w*0.045],[-sgn*w*0.04,w*0.015,w*0.04]].forEach(c=>{
+      ctx.beginPath(); ctx.arc(bx+c[0], by+c[1], c[2], 0, Math.PI*2); ctx.fill();
+    });
+  });
+  ctx.restore();
+}
+
+function drawShellCrown(cx, cy, w, ang){
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(ang);
+  const h = w*0.42;
+  // パールのバンド
+  for(let i=-4;i<=4;i++){
+    const t = i/4, x = t*w/2;
+    const y = -h*0.02 + h*0.16*t*t;
+    ctx.beginPath(); ctx.arc(x, y, w*0.028, 0, Math.PI*2);
+    ctx.fillStyle = theme.pearl; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = theme.band; ctx.stroke();
+  }
+  // ちゅうおうの かいがら
+  drawShellFan(0, -h*0.10, w*0.17, theme.jewel2, theme.band);
+  ctx.beginPath(); ctx.arc(0, -h*0.06, w*0.045, 0, Math.PI*2);
+  ctx.fillStyle = theme.pearl; ctx.fill();
+  ctx.lineWidth = 1; ctx.strokeStyle = theme.band; ctx.stroke();
+  // サイドの しずくジュエル
+  [-w*0.28, w*0.28].forEach(x=>{
+    drawDrop(x, -h*0.14, w*0.045, theme.jewel, "#fff");
+  });
+  ctx.restore();
+}
+
+// ---------- イヤリング・ネックレス ----------
+function drawEarring(x, y, faceW, ang){
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(ang);
+  const s = faceW*0.052;
+  ctx.strokeStyle = theme.band;
+  ctx.lineWidth = Math.max(1.5, faceW*0.012);
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0, s*1.2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, s*1.35, s*0.42, 0, Math.PI*2);
+  ctx.fillStyle = theme.pearl; ctx.fill();
+  ctx.strokeStyle = theme.band; ctx.stroke();
+  drawGem(theme.gem, 0, s*2.6, s*0.85);
+  ctx.restore();
+}
+
+function drawNecklace(pChin, faceW, ux, uy, vx, vy){
+  const half = faceW*0.36;
+  const drop = faceW*0.22;
+  const sag  = faceW*0.30;
+  const ax = pChin.x - ux*half + vx*drop, ay = pChin.y - uy*half + vy*drop;
+  const bx = pChin.x + ux*half + vx*drop, by = pChin.y + uy*half + vy*drop;
+  const cxp = pChin.x + vx*(drop+sag),   cyp = pChin.y + vy*(drop+sag);
+
+  ctx.save();
+  ctx.strokeStyle = theme.band;
+  ctx.lineWidth = Math.max(1.5, faceW*0.012);
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.quadraticCurveTo(cxp, cyp, bx, by);
+  ctx.stroke();
+
+  let idx = 0;
+  for(let t=0.08; t<=0.92; t+=0.084){
+    const mt = 1-t;
+    const x = mt*mt*ax + 2*mt*t*cxp + t*t*bx;
+    const y = mt*mt*ay + 2*mt*t*cyp + t*t*by;
+    ctx.beginPath(); ctx.arc(x, y, faceW*0.020, 0, Math.PI*2);
+    ctx.fillStyle = (theme.spark==="rainbow") ? RAINBOW[idx % RAINBOW.length] : theme.pearl;
+    ctx.fill();
+    ctx.strokeStyle = theme.band; ctx.lineWidth = 1; ctx.stroke();
+    idx++;
+  }
+  const midx = 0.25*ax + 0.5*cxp + 0.25*bx;
+  const midy = 0.25*ay + 0.5*cyp + 0.25*by;
+  drawGem(theme.gem, midx + vx*faceW*0.05, midy + vy*faceW*0.05, faceW*0.055);
+  ctx.restore();
+}
+
+// ---------- キラキラ ----------
+let frame = 0;
+function drawSparkles(idx, cx, cy, faceW){
+  frame++;
+  if(!sparkleSeed[idx] || frame % 90 === 0){
+    sparkleSeed[idx] = Array.from({length:7}, (_,k)=>({
+      dx:(Math.random()*2-1)*1.05,
+      dy:(Math.random()*2-1)*1.15 - 0.25,
+      ph:Math.random()*Math.PI*2,
+      sz:0.03 + Math.random()*0.03,
+      ci:k
+    }));
+  }
+  sparkleSeed[idx].forEach(sp=>{
+    const a = 0.35 + 0.65*Math.abs(Math.sin(frame*0.06 + sp.ph));
+    const x = cx + sp.dx*faceW, y = cy + sp.dy*faceW;
+    const s = sp.sz*faceW;
+    ctx.save();
+    ctx.globalAlpha = a;
+    if(theme.spark==="star"){
+      drawStar(x, y, s*1.1, "#F7E08A", "rgba(201,154,46,.7)");
+    }else if(theme.spark==="bubble"){
+      ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fill();
+      ctx.lineWidth = Math.max(1, s*0.18);
+      ctx.strokeStyle = "rgba(190,235,240,.95)"; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x - s*0.35, y - s*0.35, s*0.2, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fill();
+    }else if(theme.spark==="rainbow"){
+      const c = RAINBOW[sp.ci % RAINBOW.length];
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(Math.PI/4);
+      ctx.fillStyle = c;
+      ctx.fillRect(-s*0.6, -s*0.6, s*1.2, s*1.2);
+      ctx.restore();
+    }else if(theme.spark==="petal"){
+      const c = (sp.ci % 2 === 0) ? theme.petal : theme.petal2;
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(sp.ph + frame*0.01);
+      ctx.beginPath(); ctx.ellipse(0, 0, s*0.9, s*0.5, 0, 0, Math.PI*2);
+      ctx.fillStyle = c; ctx.fill();
+      ctx.restore();
+    }else{
+      ctx.fillStyle = "#FFF6D8";
+      ctx.strokeStyle = "rgba(232,164,90,.6)";
+      ctx.beginPath();
+      ctx.moveTo(x, y-s); ctx.quadraticCurveTo(x, y, x+s, y);
+      ctx.quadraticCurveTo(x, y, x, y+s);
+      ctx.quadraticCurveTo(x, y, x-s, y);
+      ctx.quadraticCurveTo(x, y, x, y-s);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  });
+}
+
+// ---------- シャッター ----------
+const shutter = document.getElementById("shutter");
+const modal = document.getElementById("modal");
+const shot = document.getElementById("shot");
+const saveLink = document.getElementById("saveLink");
+document.getElementById("closeModal").addEventListener("click", ()=>modal.classList.remove("show"));
+
+shutter.addEventListener("click", async ()=>{
+  if(!landmarker) return;
+  for(const n of ["3","2","1"]){
+    countEl.textContent = n;
+    countEl.classList.add("show");
+    await new Promise(r=>setTimeout(r, 700));
+    countEl.classList.remove("show");
+    await new Promise(r=>setTimeout(r, 120));
+  }
+  const tmp = document.createElement("canvas");
+  tmp.width = canvas.width; tmp.height = canvas.height;
+  const t = tmp.getContext("2d");
+  t.translate(tmp.width, 0); t.scale(-1, 1);
+  t.drawImage(canvas, 0, 0);
+  const url = tmp.toDataURL("image/png");
+  shot.src = url;
+  saveLink.href = url;
+  modal.classList.add("show");
+});
+
+init();
+</script>
+</body>
+</html>
